@@ -6,7 +6,7 @@
 ![Status](https://img.shields.io/badge/Status-In%20Progress-yellow)
 
 **University:** Università degli Studi di Trieste (Units)  
-**Course:** Introduction to Machine Learning  
+**Course:** Advanced and Parallel Programming 
 **Academic Year:** 2025-2026  
 
 This repository contains the laboratory exercises for the "Advanced and Parallel Programming" (Programmazione Avanzata e Parallela) course. The projects are written in C and focus on memory management, algorithm optimization, CPU cache exploitation, and advanced build systems.
