@@ -1,5 +1,14 @@
 # Advanced and Parallel Programming - Course Exercises
 
+![C](https://img.shields.io/badge/c-%2300599C.svg?style=for-the-badge&logo=c&logoColor=white)
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![Bash](https://img.shields.io/badge/bash-%23121011.svg?style=for-the-badge&logo=gnu-bash&logoColor=white)
+![Status](https://img.shields.io/badge/Status-In%20Progress-yellow)
+
+**University:** Università degli Studi di Trieste (Units)  
+**Course:** Introduction to Machine Learning  
+**Academic Year:** 2025-2026  
+
 This repository contains the laboratory exercises for the "Advanced and Parallel Programming" (Programmazione Avanzata e Parallela) course. The projects are written in C and focus on memory management, algorithm optimization, CPU cache exploitation, and advanced build systems.
 
 ## 📂 Repository Structure
