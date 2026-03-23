@@ -1,0 +1,132 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <string.h>
+
+#include "merge.h"
+
+int cmpfunc (const void * a, const void * b) {
+  return ( *(int*)a - *(int*)b );
+}
+
+int * random_vector(int len)
+{
+  int * v = (int *) malloc (len * sizeof(int));
+  for (int i = 0; i < len; i++) {
+    v[i] = rand();
+  }
+  return v;
+}
+
+float test_merge(int n, void (* m) (int *, int, int *, int, int *))
+{
+  int * v1 = random_vector(n);
+  int * v2 = random_vector(n);
+  int * results = (int *) malloc(2 * n * sizeof(int));
+  qsort(v1, n, sizeof(int), cmpfunc);
+  qsort(v2, n, sizeof(int), cmpfunc);
+  clock_t start = clock();
+  m(v1, n, v2, n, results);
+  clock_t end = clock();
+  float ms = (float) (end - start) / (CLOCKS_PER_SEC / 1000.0);
+  free(v1);
+  free(v2);
+  free(results);
+  return ms;
+}
+
+float test_mergesort(int n, void (*m)(int *, int, int *, int, int *)){
+
+  int * v = random_vector(n);
+  clock_t start = clock();
+  merge_sort(v, n, m);
+  clock_t end = clock();
+  float ms = (float) (end - start) / (CLOCKS_PER_SEC / 1000.0);
+  free(v);
+  return(ms);
+}
+
+float avg_test_merge(int n,
+		    void (* m) (int *, int, int *, int, int *),
+		    int repetitions)
+{
+  float avg = 0;
+  for (int i = 0; i < repetitions; i++) {
+    avg += test_merge(n, m);
+  }
+  return avg / repetitions;
+}
+
+float avg_test_mergesort(int n, void (*m)(int *, int, int *, int, int *), int repetitions){
+
+  float tot_time = 0;
+  for(int i = 0; i < repetitions; i++){
+    tot_time += test_mergesort(n, m);
+  }
+  return tot_time / repetitions;
+}
+
+void check_merge(void (* m) (int *, int, int *, int, int *))
+{
+  int a[5] = {4, 6, 9, 17, 20};
+  int b[5] = {2, 5, 7, 10, 18};
+  int c[10];
+  m(a, 5, b, 5, c);
+  for (int i = 0; i < 10; i++) {
+    printf("%d ", c[i]);
+  }
+  printf("\n");
+}
+
+void check_mergesort(void (*ms)(int *, int, void (*)(int *, int, int *, int, int *)), 
+                     void (*m)(int *, int, int *, int, int *)) {
+    // 1. Creiamo un piccolo vettore di prova disordinato
+    int test[] = {9, 4, 17, 2, 20, 5, 7, 10, 18, 6};
+    int len = 10;
+
+    printf("Sequenza originale: ");
+    for (int i = 0; i < len; i++) printf("%d ", test[i]);
+    printf("\n");
+
+    // 2. Chiamiamo la funzione di ordinamento (ms) usando il merge scelto (m)
+    ms(test, len, m);
+
+    // 3. Stampiamo il risultato per verificare "a occhio"
+    printf("Sequenza ordinata:  ");
+    for (int i = 0; i < len; i++) printf("%d ", test[i]);
+    printf("\n\n");
+}
+
+int main(int argc, char * argv[])
+{
+  srand(time(NULL));
+
+  printf("Test merge:\n");
+  check_merge(merge);
+
+  printf("Test merge_branchless:\n");
+  check_merge(merge_branchless);
+
+  printf("Test Merge Sort (Standard):\n");
+  check_mergesort(merge_sort, merge);
+
+  printf("Test Merge Sort (Branchless):\n");
+  check_mergesort(merge_sort, merge_branchless);
+
+  for(int n = 1000; n <= 20000; n = n + 1000){
+    // 1. Tempi del solo merge (quello che facevi già)
+    float mean_merge = avg_test_merge(n, merge, 10);
+    float mean_merge_br = avg_test_merge(n, merge_branchless, 10);
+
+    // 2. Tempi dell'INTERO mergesort (usando le due strategie)
+    float ms_std = avg_test_mergesort(n, merge, 10);           // Qui usiamo merge
+    float ms_branchless = avg_test_mergesort(n, merge_branchless, 10); // Qui usiamo merge_branchless
+
+    printf("N = %d\n", n);
+    printf("  Merge: Standard = %f ms, Branchless = %f ms\n", mean_merge, mean_merge_br);
+    printf("  MergeSort: Standard = %f ms, Branchless = %f ms\n", ms_std, ms_branchless);
+    printf("--------------------------------------------------\n");
+  }
+  
+  return 0;
+}

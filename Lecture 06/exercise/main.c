@@ -1,0 +1,55 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+#include "bst.h"
+#include "tree_node.h"
+#include "print_tree.h"
+
+void s_test (int n) {
+  int i = 0;
+  bst t = make_bst();
+  printf("Aggiunta dei nodi\n");
+  for (;i < n; i++) {
+    t_node n_node = make_t_node(); // Usiamo n_node per non confonderci con il parametro n
+    n_node->key = i;
+    bst_insert(t, n_node);
+  }
+  printf("L'albero è profondo %d\n", bst_depth(t));
+  print_tree(t);
+  delete_bst(t);
+}
+
+void r_test (int n) {
+  int i = 0;
+  bst t = make_bst();
+  printf("Aggiunta dei nodi casuali\n");
+  for (; i < n; i++) {
+    t_node n_node = make_t_node();
+    
+    // Generiamo un numero casuale
+    int r = rand();
+
+    n_node->key = r;
+    
+    bst_insert(t, n_node);
+  }
+  printf("L'albero è profondo %d\n", bst_depth(t));
+  
+  print_tree(t);
+  delete_bst(t);
+}
+
+int main (int argc, char * argv[]){
+  int n;
+
+  srand((int)time(NULL));
+
+  printf("How many nodes do you want?");
+  while(scanf("%d", &n)!=1);
+
+  s_test(n);
+  r_test(n);
+
+  return 0;
+}
