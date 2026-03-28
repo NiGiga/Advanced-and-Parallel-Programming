@@ -1,12 +1,12 @@
 CC = gcc
 CFLAGS = -O3 -Wall -std=c17 -pedantic
-HEADERS = ${wildcard *.h}
-OBJECTS = main.o linked_list.o unrolled_linked_list.o
+HEADERS = $(wildcard *.h)
+OBJECTS = main.o tree.o ctree.o
 
 all: main
 
-main: ${OBJECTS}
-	${CC} ${CFLAGS} -o $@ $^
+main: ${OBJECTS} ${HEADERS}
+	${CC} ${CFLAGS} ${OBJECTS} -o $@
 
 %.o: %.c ${HEADERS}
 	${CC} ${CFLAGS} -c $<
