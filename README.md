@@ -15,7 +15,7 @@ This repository contains the laboratory exercises for the "Advanced and Parallel
 
 The repository is divided into different folders, each representing a specific laboratory session:
 
-### [Lab 01: Project Structure, Makefiles, and Libraries](./lab01)
+### [Lab 06: Project Structure, Makefiles, and Libraries](./Lecture 06)
 [cite_start]The goal of this exercise is to learn how to split a monolithic C project into multiple files with their respective headers and manage the build process[cite: 55]. 
 * **Key Concepts:**
   * [cite_start]Splitting C source code into separate modules (e.g., `main.c`, `tree.c`, `node.c`)[cite: 57].
@@ -24,7 +24,7 @@ The repository is divided into different folders, each representing a specific l
   * [cite_start]Using a `SHARED` variable in the Makefile to toggle between generating a **static** or **dynamic (shared)** library[cite: 62].
   * [cite_start]Implementing custom tree traversal for formatted printing[cite: 64, 66].
 
-### [Lab 02: Branchless Programming and Mergesort](./lab02)
+### [Lab 08: Branchless Programming and Mergesort](./Lecture 08)
 [cite_start]This exercise focuses on implementing the merge step of two sorted arrays of lengths $n_1$ and $n_2$ into a third array of length $n_1+n_2$[cite: 3].
 * **Key Concepts:**
   * [cite_start]Writing two distinct implementations of the merge operation: one using standard `if/else` branches and one strictly **branchless**[cite: 7].
@@ -32,12 +32,23 @@ The repository is divided into different folders, each representing a specific l
   * [cite_start]Benchmarking execution times across 10 repetitions with random arrays of sizes ranging from 1,000 to 20,000 elements[cite: 22].
   * [cite_start]**Extra:** Expanding the code to implement a fully iterative (non-recursive) Mergesort algorithm[cite: 44, 49].
 
-### [Lab 03: Cache Locality and Unrolled Linked Lists](./lab03)
+### [Lab 11: Cache Locality and Unrolled Linked Lists](./Lecture 11)
 This lab explores how hardware-level memory architecture (CPU Cache) impacts the performance of data structures that share the same $O(n)$ asymptotic complexity.
 * **Key Concepts:**
   * Implementing a Standard Linked List and an **Unrolled Linked List** (grouping up to $k$ elements per node).
   * Dynamic memory allocation (`malloc`/`free`) for complex nested structures.
   * Measuring search performance to demonstrate the impact of **spatial locality** and cache hits/misses.
+
+### [Lab 14: N-ary Search Tree Implementation](./Lecture 14)
+* **Key Concepts:**
+  * Built an N-ary search tree: We implemented a custom search tree in C to function as a map, associating integer keys with float values.
+  * Implemented insertion (cinsert): We wrote the logic to allocate new nodes, insert keys, and maintain them in ascending order within the node's array.
+  * Implemented search (csearch): We created a function to navigate the tree's keys and children to find specific values.
+  * Implemented visualization (print_ctree): We built a recursive function to print the tree's hierarchical structure using a specific bracketed format.
+* **The core objectives:**
+  * Analyze higher fanout: The main goal was to see the effect of using a search tree with a larger number of children per node.
+  * Improve memory locality: This approach demonstrates how to build data structures that interact more efficiently with memory.
+  * Understand advanced structures: This exercise serves as a foundation for understanding complex data structures like B-trees, which are essential for working with mass storage
 
 ## 🛠️ Technologies & Tools
 * **Language:** C (Standard C17)
