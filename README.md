@@ -59,6 +59,21 @@ This exercise focuses on implementing different variants of $n \times n$ floatin
   * Implementing a **blocked multiplication** (`blocked_multiply`) that processes matrices in fixed-size memory blocks (e.g., 16x16) to maximize cache hits and minimize RAM fetches.
   * Benchmarking and comparing execution times to verify the theoretical performance benefits of cache-aware algorithms (e.g., demonstrating a time reduction from ~639 ms to ~411 ms).
 
+### [Lab 21: Image Manipulation, I/O in C](./Lecture 05)
+The purpose of this exercise is to familiarize you with the various input/output methods
+provided by the C language. Specifically, the goal is to create a system
+for reading and modifying a very simple image format (NetPBM in
+grayscale).
+
+### [Lab 23: Image Manipulation and parallel programming](./Lecture 05)
+The purpose of this exercise is to begin familiarizing yourself
+with parallelizing C code using OpenMP. Specifically, by revisiting
+the project for reading and writing images in NetPBM format covered
+in the previous exercise, you are asked to generate transformations based
+on a reference image. The idea is to treat each pixel as
+a point in a matrix and apply a transformation to this point that
+
+
 ## 🛠️ Technologies & Tools
 * **Language:** C (Standard C17)
 * **Compiler:** GCC (with specific optimization flags like `-O3`, `-fno-if-conversion`)
