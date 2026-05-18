@@ -6,6 +6,8 @@
 #include "interpreter.h"
 #include "stack_ops.h"
 #include "tensor.h"
+#include "pgm_io.h"
+#include "tensor_io.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -319,6 +321,273 @@ interpreter_status execute_token(stack *st, const char *tok) {
 	      return INTERPRETER_OK;
 	    }
 
+	    case 'S': {
+	      /* S(a -- S(a)): somma di tutti gli elementi. */
+	      value va;
+	      if (!stack_pop(st, &va)) {
+                return INTERPRETER_STACK_ERROR;
+	      }
+
+	      if (va.type != VALUE_TENSOR || !va.as.t) {
+                if (va.type == VALUE_STRING && va.as.s) {
+		  free(va.as.s);
+                }
+                return INTERPRETER_TYPE_ERROR;
+	      }
+
+	      tensor *res = tensor_sum_all(va.as.t);
+	      tensor_dec_ref(va.as.t);
+
+	      if (!res) {
+                return INTERPRETER_MEMORY_ERROR;
+	      }
+
+	      value vres;
+	      vres.type = VALUE_TENSOR;
+	      vres.as.t = res;
+
+	      if (!stack_push(st, vres)) {
+                tensor_dec_ref(res);
+                return INTERPRETER_MEMORY_ERROR;
+	      }
+
+	      return INTERPRETER_OK;
+	    }
+
+	    case '?': {
+	      /* ?(s -- a): genera tensore random di shape s. */
+	      value vs;
+	      if (!stack_pop(st, &vs)) {
+                return INTERPRETER_STACK_ERROR;
+	      }
+
+	      if (vs.type != VALUE_TENSOR || !vs.as.t) {
+                if (vs.type == VALUE_STRING && vs.as.s) {
+		  free(vs.as.s);
+                }
+                return INTERPRETER_TYPE_ERROR;
+	      }
+
+	      tensor *res = tensor_random_from_shape(vs.as.t);
+	      tensor_dec_ref(vs.as.t);
+
+	      if (!res) {
+                return INTERPRETER_TYPE_ERROR; /* shape non valida o memoria. */
+	      }
+
+	      value vres;
+	      vres.type = VALUE_TENSOR;
+	      vres.as.t = res;
+
+	      if (!stack_push(st, vres)) {
+                tensor_dec_ref(res);
+                return INTERPRETER_MEMORY_ERROR;
+	      }
+
+	      return INTERPRETER_OK;
+	    }
+
+	    case 'f': {
+	      /* f(s v -- a): crea tensore di shape s e riempie con i valori di v. */
+	      value vv, vs;
+
+	      /* v è in cima, s subito sotto: pop prima v, poi s. */
+	      if (!stack_pop(st, &vv) || !stack_pop(st, &vs)) {
+		if (vv.type == VALUE_TENSOR && vv.as.t) tensor_dec_ref(vv.as.t);
+		if (vv.type == VALUE_STRING && vv.as.s) free(vv.as.s);
+		if (vs.type == VALUE_TENSOR && vs.as.t) tensor_dec_ref(vs.as.t);
+		if (vs.type == VALUE_STRING && vs.as.s) free(vs.as.s);
+		return INTERPRETER_STACK_ERROR;
+	      }
+
+	      if (vs.type != VALUE_TENSOR || !vs.as.t ||
+		  vv.type != VALUE_TENSOR || !vv.as.t) {
+
+		if (vs.type == VALUE_TENSOR && vs.as.t) tensor_dec_ref(vs.as.t);
+		if (vs.type == VALUE_STRING && vs.as.s) free(vs.as.s);
+		if (vv.type == VALUE_TENSOR && vv.as.t) tensor_dec_ref(vv.as.t);
+		if (vv.type == VALUE_STRING && vv.as.s) free(vv.as.s);
+
+		return INTERPRETER_TYPE_ERROR;
+	      }
+
+	      /* vs è la shape, vv sono i valori. */
+	      tensor *res = tensor_fill_from_shape(vs.as.t, vv.as.t);
+	      tensor_dec_ref(vs.as.t);
+	      tensor_dec_ref(vv.as.t);
+
+	      if (!res) {
+		return INTERPRETER_TYPE_ERROR; /* shape o v non validi. */
+	      }
+
+	      value vres;
+	      vres.type = VALUE_TENSOR;
+	      vres.as.t = res;
+
+	      if (!stack_push(st, vres)) {
+		tensor_dec_ref(res);
+		return INTERPRETER_MEMORY_ERROR;
+	      }
+
+	      return INTERPRETER_OK;
+	    }
+
+	    case '(': {
+	      /* (filename -- tensor): legge immagine PGM come tensore 2D. */
+	      value vfile;
+	      if (!stack_pop(st, &vfile)) {
+                return INTERPRETER_STACK_ERROR;
+	      }
+
+	      if (vfile.type != VALUE_STRING || !vfile.as.s) {
+                if (vfile.type == VALUE_TENSOR && vfile.as.t) {
+		  tensor_dec_ref(vfile.as.t);
+                }
+                return INTERPRETER_TYPE_ERROR;
+	      }
+
+	      tensor *img = tensor_read_pgm(vfile.as.s);
+	      free(vfile.as.s);
+
+	      if (!img) {
+                return INTERPRETER_TYPE_ERROR; /* o I/O error */
+	      }
+
+	      value vimg;
+	      vimg.type = VALUE_TENSOR;
+	      vimg.as.t = img;
+
+	      if (!stack_push(st, vimg)) {
+                tensor_dec_ref(img);
+                return INTERPRETER_MEMORY_ERROR;
+	      }
+
+	      return INTERPRETER_OK;
+	    }
+
+	    case ')': {
+	      /* (a filename -- ): scrive tensore 2D come PGM. */
+	      value vfile, va;
+
+	      if (!stack_pop(st, &vfile) || !stack_pop(st, &va)) {
+                if (vfile.type == VALUE_TENSOR && vfile.as.t) tensor_dec_ref(vfile.as.t);
+                if (vfile.type == VALUE_STRING && vfile.as.s) free(vfile.as.s);
+                if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+                if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+                return INTERPRETER_STACK_ERROR;
+	      }
+
+	      if (vfile.type != VALUE_STRING || !vfile.as.s ||
+		  va.type != VALUE_TENSOR || !va.as.t) {
+
+                if (vfile.type == VALUE_TENSOR && vfile.as.t) tensor_dec_ref(vfile.as.t);
+                if (vfile.type == VALUE_STRING && vfile.as.s) free(vfile.as.s);
+                if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+                if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+
+                return INTERPRETER_TYPE_ERROR;
+	      }
+
+	      int ok = tensor_write_pgm(va.as.t, vfile.as.s);
+	      tensor_dec_ref(va.as.t);
+	      free(vfile.as.s);
+
+	      if (!ok) {
+                return INTERPRETER_TYPE_ERROR; /* o errore I/O */
+	      }
+
+	      return INTERPRETER_OK;
+	    }
+
+	    case '{': {
+	      /* { (filename -- tensor)
+	       * Carica un tensore da file binario nel formato on_disk_tensor
+	       * usando mmap e lo lascia in cima allo stack.
+	       */
+	      value vfile;
+	      if (!stack_pop(st, &vfile)) {
+                /* Stack vuoto: non ho nemmeno il filename. */
+                return INTERPRETER_STACK_ERROR;
+	      }
+
+	      /* Mi aspetto una stringa filename. */
+	      if (vfile.type != VALUE_STRING || !vfile.as.s) {
+                /* Tipo sbagliato: libero eventuali risorse e segnalo errore. */
+                if (vfile.type == VALUE_TENSOR && vfile.as.t) {
+		  tensor_dec_ref(vfile.as.t);
+                }
+                return INTERPRETER_TYPE_ERROR;
+	      }
+
+	      /* Carico il tensore dal file usando mmap. */
+	      tensor *t = tensor_load_from_file_mmap(vfile.as.s);
+	      /* La stringa del filename non mi serve più. */
+	      free(vfile.as.s);
+
+	      if (!t) {
+                /* Errore di formato/I/O durante il caricamento. */
+                return INTERPRETER_TYPE_ERROR;
+	      }
+
+	      /* Spingo il tensore appena caricato sullo stack. */
+	      value vt;
+	      vt.type = VALUE_TENSOR;
+	      vt.as.t = t;
+
+	      if (!stack_push(st, vt)) {
+                /* Se il push fallisce, rilascio il tensore. */
+                tensor_dec_ref(t);
+                return INTERPRETER_MEMORY_ERROR;
+	      }
+
+	      return INTERPRETER_OK;
+	    }
+
+            case '}': {
+	      /* } (a filename -- )
+	       * Salva un tensore su disco nel formato on_disk_tensor.
+	       */
+	      value vfile, va;
+
+	      /* In cima ho filename, subito sotto il tensore a:
+	       * poppo prima il filename, poi il tensore. */
+	      if (!stack_pop(st, &vfile) || !stack_pop(st, &va)) {
+                /* Se uno dei due pop fallisce, ripulisco ciò che ho eventualmente tolto. */
+                if (vfile.type == VALUE_TENSOR && vfile.as.t) tensor_dec_ref(vfile.as.t);
+                if (vfile.type == VALUE_STRING && vfile.as.s) free(vfile.as.s);
+                if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+                if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+                return INTERPRETER_STACK_ERROR;
+	      }
+
+	      /* Controllo i tipi: mi serve un tensore e una stringa filename. */
+	      if (vfile.type != VALUE_STRING || !vfile.as.s ||
+		  va.type != VALUE_TENSOR || !va.as.t) {
+
+                if (vfile.type == VALUE_TENSOR && vfile.as.t) tensor_dec_ref(vfile.as.t);
+                if (vfile.type == VALUE_STRING && vfile.as.s) free(vfile.as.s);
+                if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+                if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+
+                return INTERPRETER_TYPE_ERROR;
+	      }
+
+	      /* Scrivo il tensore su disco nel formato richiesto. */
+	      int ok = tensor_save_to_file(va.as.t, vfile.as.s);
+
+	      /* Dopo la scrittura posso rilasciare sia il tensore sia il filename. */
+	      tensor_dec_ref(va.as.t);
+	      free(vfile.as.s);
+
+	      if (!ok) {
+                /* Errore durante la scrittura del file. */
+                return INTERPRETER_TYPE_ERROR;
+	      }
+
+	      /* } non lascia niente sullo stack (consuma sia a che filename). */
+	      return INTERPRETER_OK;
+	    }
+
             default:
                 /* Non è una delle stack-ops, continuo con gli altri casi. */
                 break;
@@ -420,8 +689,129 @@ interpreter_status execute_token(stack *st, const char *tok) {
         return INTERPRETER_OK;
     }
 
-    /* Se arrivo qui, il token non è ancora gestito.
-     * In futuro qui aggiungerò -, *, @, R, ecc.
-     */
+    /* 5) Prodotto di matrici con '@' (b a -- a@b). */
+    if (tok[0] == '@' && tok[1] == '\0') {
+        value va, vb;
+        if (!stack_pop(st, &va) || !stack_pop(st, &vb)) {
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+            return INTERPRETER_STACK_ERROR;
+        }
+
+        if (va.type != VALUE_TENSOR || !va.as.t ||
+            vb.type != VALUE_TENSOR || !vb.as.t) {
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        tensor *res = tensor_matmul(vb.as.t, va.as.t);
+        tensor_dec_ref(va.as.t);
+        tensor_dec_ref(vb.as.t);
+
+        if (!res) {
+            return INTERPRETER_TYPE_ERROR;  /* dimensioni incompatibili o memoria. */
+        }
+
+        value vres;
+        vres.type = VALUE_TENSOR;
+        vres.as.t = res;
+
+        if (!stack_push(st, vres)) {
+            tensor_dec_ref(res);
+            return INTERPRETER_MEMORY_ERROR;
+        }
+
+        return INTERPRETER_OK;
+    }
+
+    /* 6) Prodotto scalare '.' (b a -- a.b). */
+    if (tok[0] == '.' && tok[1] == '\0') {
+        value va, vb;
+        if (!stack_pop(st, &va) || !stack_pop(st, &vb)) {
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+            return INTERPRETER_STACK_ERROR;
+        }
+
+        if (va.type != VALUE_TENSOR || !va.as.t ||
+            vb.type != VALUE_TENSOR || !vb.as.t) {
+
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        tensor *res = tensor_dot(vb.as.t, va.as.t);
+        tensor_dec_ref(va.as.t);
+        tensor_dec_ref(vb.as.t);
+
+        if (!res) {
+            return INTERPRETER_TYPE_ERROR; /* dimensioni non compatibili. */
+        }
+
+        value vres;
+        vres.type = VALUE_TENSOR;
+        vres.as.t = res;
+
+        if (!stack_push(st, vres)) {
+            tensor_dec_ref(res);
+            return INTERPRETER_MEMORY_ERROR;
+        }
+
+        return INTERPRETER_OK;
+    }
+
+    /* 7) Convoluzione 2D 'c' (a k -- conv(a,k)). */
+    if (tok[0] == 'c' && tok[1] == '\0') {
+        value vk, va;
+        if (!stack_pop(st, &vk) || !stack_pop(st, &va)) {
+            if (vk.type == VALUE_TENSOR && vk.as.t) tensor_dec_ref(vk.as.t);
+            if (vk.type == VALUE_STRING && vk.as.s) free(vk.as.s);
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            return INTERPRETER_STACK_ERROR;
+        }
+
+        if (vk.type != VALUE_TENSOR || !vk.as.t ||
+            va.type != VALUE_TENSOR || !va.as.t) {
+
+            if (vk.type == VALUE_TENSOR && vk.as.t) tensor_dec_ref(vk.as.t);
+            if (vk.type == VALUE_STRING && vk.as.s) free(vk.as.s);
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        tensor *res = tensor_conv2d(va.as.t, vk.as.t);
+        tensor_dec_ref(va.as.t);
+        tensor_dec_ref(vk.as.t);
+
+        if (!res) {
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        value vres;
+        vres.type = VALUE_TENSOR;
+        vres.as.t = res;
+
+        if (!stack_push(st, vres)) {
+            tensor_dec_ref(res);
+            return INTERPRETER_MEMORY_ERROR;
+        }
+
+        return INTERPRETER_OK;
+    }
+    
     return INTERPRETER_PARSE_ERROR;
 }

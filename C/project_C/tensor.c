@@ -6,7 +6,9 @@
 #include "tensor.h"
 #include <stdlib.h>
 #include <stdio.h>  /* per printf nella tensor_print */
-#include <omp.h> 
+#include <omp.h>
+#include <stdlib.h>  /* rand, RAND_MAX */
+#include <sys/mman.h>
 
 /* Calcolo del numero totale di elementi a partire dalla shape.
  * Qui assumiamo dimensioni non negative; se ndim è fuori range, ritorniamo 0.
@@ -29,6 +31,10 @@ size_t tensor_num_elements(const int32_t *shape, int32_t ndim) {
 /* Crea un tensore con la shape indicata e alloca il buffer dati. */
 tensor *tensor_create(int32_t *shape, int32_t ndim) {
     tensor *t = malloc(sizeof(tensor));
+    
+    t->mmap_base = NULL;
+    t->mmap_size = 0;
+    
     if (!t) {
         return NULL;
     }
@@ -76,10 +82,25 @@ void tensor_dec_ref(tensor *t) {
         return;
     }
 
+    /* Ogni volta che non ho più bisogno di un riferimento logico al tensore,
+     * chiamo questa funzione per diminuire il refcount. */
     t->refcount -= 1;
+
+    /* Se non ci sono più riferimenti attivi, devo rilasciare davvero le risorse. */
     if (t->refcount <= 0) {
-        /* Libero prima il buffer dati, poi la struttura. */
-        free(t->data);
+        if (t->mmap_base) {
+            /* Caso 1: i dati provengono da una mappatura di file (mmap).
+             * In questo caso NON devo chiamare free(t->data), ma smappare
+             * l'intera area mappata.
+             */
+            munmap(t->mmap_base, t->mmap_size);
+        } else {
+            /* Caso 2: tensore "normale" creato con tensor_create.
+             * Qui ho allocato data con malloc, quindi lo rilascio con free. */
+            free(t->data);
+        }
+
+        /* Infine libero anche la struttura tensor stessa. */
         free(t);
     }
 }
@@ -397,4 +418,236 @@ tensor *tensor_reshape(tensor *a, const tensor *s) {
     a->refcount += 1;
 
     return res;
+}
+
+/* Riduzione: somma di tutti gli elementi di a in un tensore 1D di 1 elemento. */
+tensor *tensor_sum_all(const tensor *a) {
+    if (!a) {
+        return NULL;
+    }
+
+    int32_t shape1d[1];
+    shape1d[0] = 1;  /* risultato è sempre 1 elemento. */
+
+    tensor *res = tensor_create(shape1d, 1);
+    if (!res) {
+        return NULL;
+    }
+
+    float sum = 0.0f;
+    for (size_t i = 0; i < a->size; ++i) {
+        sum += a->data[i];
+    }
+
+    res->data[0] = sum;
+    return res;
+}
+
+/* Genera un tensore di shape definita da s (1D di 1 o 2 elementi), 
+ * riempito con float random uniformi in [0,1]. */
+tensor *tensor_random_from_shape(const tensor *s) {
+    if (!s) {
+        return NULL;
+    }
+
+    /* s deve essere 1D con 1 o 2 elementi. */
+    if (s->ndim != 1 || (s->size != 1 && s->size != 2)) {
+        return NULL;
+    }
+
+    int32_t shape[MAX_DIM];
+    int32_t ndim = (int32_t)s->size;
+
+    for (int32_t i = 0; i < ndim; ++i) {
+        int val = (int)s->data[i];
+        if (val <= 0) {
+            return NULL;
+        }
+        shape[i] = (int32_t)val;
+    }
+
+    tensor *res = tensor_create(shape, ndim);
+    if (!res) {
+        return NULL;
+    }
+
+    size_t n = res->size;
+    for (size_t i = 0; i < n; ++i) {
+        float r = (float)rand() / (float)RAND_MAX;  /* in [0,1]. */
+        res->data[i] = r;
+    }
+
+    return res;
+}
+
+/* Fill: crea un tensore di shape s e lo riempie ripetendo i valori di v. */
+tensor *tensor_fill_from_shape(const tensor *s, const tensor *v) {
+    if (!s || !v) {
+        return NULL;
+    }
+
+    /* s deve essere 1D con 1 o 2 elementi. */
+    if (s->ndim != 1 || (s->size != 1 && s->size != 2)) {
+        return NULL;
+    }
+
+    int32_t shape[MAX_DIM];
+    int32_t ndim = (int32_t)s->size;
+
+    for (int32_t i = 0; i < ndim; ++i) {
+        int val = (int)s->data[i];
+        if (val <= 0) {
+            return NULL;
+        }
+        shape[i] = (int32_t)val;
+    }
+
+    tensor *res = tensor_create(shape, ndim);
+    if (!res) {
+        return NULL;
+    }
+
+    if (v->size == 0) {
+        tensor_dec_ref(res);
+        return NULL;
+    }
+
+    size_t n = res->size;
+    size_t m = v->size;
+
+    for (size_t i = 0; i < n; ++i) {
+        res->data[i] = v->data[i % m];
+    }
+
+    return res;
+}
+
+/* Prodotto di matrici 2D: se a è m×k e b è k×n, ritorna m×n. */
+tensor *tensor_matmul(const tensor *a, const tensor *b) {
+    if (!a || !b) {
+        return NULL;
+    }
+
+    /* Entrambi devono essere 2D. */
+    if (a->ndim != 2 || b->ndim != 2) {
+        return NULL;
+    }
+
+    int32_t m = a->shape[0];
+    int32_t k1 = a->shape[1];
+    int32_t k2 = b->shape[0];
+    int32_t n = b->shape[1];
+
+    /* Controllo compatibilità delle dimensioni interne. */
+    if (k1 != k2) {
+        return NULL;
+    }
+
+    int32_t shape_res[2] = { m, n };
+    tensor *res = tensor_create(shape_res, 2);
+    if (!res) {
+        return NULL;
+    }
+
+    /* Matrici memorizzate row-major: a(m×k), b(k×n), res(m×n). */
+    for (int32_t i = 0; i < m; ++i) {
+        for (int32_t j = 0; j < n; ++j) {
+            float sum = 0.0f;
+            for (int32_t t = 0; t < k1; ++t) {
+                float av = a->data[i * k1 + t];
+                float bv = b->data[t * n + j];
+                sum += av * bv;
+            }
+            res->data[i * n + j] = sum;
+        }
+    }
+
+    return res;
+}
+
+/* Prodotto scalare tra due vettori 1D di stessa dimensione. */
+tensor *tensor_dot(const tensor *a, const tensor *b) {
+    if (!a || !b) {
+        return NULL;
+    }
+
+    /* Entrambi devono essere 1D. */
+    if (a->ndim != 1 || b->ndim != 1) {
+        return NULL;
+    }
+
+    /* Controllo compatibilità delle dimensioni. */
+    if (a->size != b->size) {
+        return NULL;
+    }
+
+    int32_t shape1d[1] = { 1 };
+    tensor *res = tensor_create(shape1d, 1);
+    if (!res) {
+        return NULL;
+    }
+
+    float sum = 0.0f;
+    for (size_t i = 0; i < a->size; ++i) {
+        sum += a->data[i] * b->data[i];
+    }
+
+    res->data[0] = sum;
+    return res;
+}
+
+/* Convoluzione 2D con stride 1 e padding di zeri: 
+ * a: input H×W, k: kernel Kh×Kw, output H×W. */
+tensor *tensor_conv2d(const tensor *a, const tensor *k) {
+    if (!a || !k) {
+        return NULL;
+    }
+
+    /* Entrambi devono essere 2D. */
+    if (a->ndim != 2 || k->ndim != 2) {
+        return NULL;
+    }
+
+    int32_t H = a->shape[0];
+    int32_t W = a->shape[1];
+    int32_t Kh = k->shape[0];
+    int32_t Kw = k->shape[1];
+
+    /* Se il kernel ha dim nulla, ritorniamo NULL */
+    if (Kh <= 0 || Kw <= 0) {
+        return NULL;
+    }
+
+    int32_t shape_out[2] = { H, W };
+    tensor *out = tensor_create(shape_out, 2);
+    if (!out) {
+        return NULL;
+    }
+
+    /* Zero-padding: per ogni output (i,j), centriamo il kernel e sommiamo
+     * solo dove l'indice cade dentro i limiti dell'immagine.
+     */
+    int32_t pad_h = Kh / 2;
+    int32_t pad_w = Kw / 2;
+
+    for (int32_t i = 0; i < H; ++i) {
+        for (int32_t j = 0; j < W; ++j) {
+            float sum = 0.0f;
+            for (int32_t ki = 0; ki < Kh; ++ki) {
+                for (int32_t kj = 0; kj < Kw; ++kj) {
+                    int32_t ai = i + ki - pad_h;
+                    int32_t aj = j + kj - pad_w;
+                    if (ai < 0 || ai >= H || aj < 0 || aj >= W) {
+                        continue; /* padding a zero. */
+                    }
+                    float aval = a->data[ai * W + aj];
+                    float kval = k->data[ki * Kw + kj];
+                    sum += aval * kval;
+                }
+            }
+            out->data[i * W + j] = sum;
+        }
+    }
+
+    return out;
 }

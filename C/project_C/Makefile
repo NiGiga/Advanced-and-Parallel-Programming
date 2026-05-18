@@ -6,7 +6,7 @@ CFLAGS = -Wall -Wextra -O2 -std=c11 -fopenmp
 LDFLAGS = -fopenmp
 
 # Lista dei file sorgente
-SRCS = main.c tensor.c stack.c stack_ops.c interpreter.c
+SRCS = main.c tensor.c stack.c stack_ops.c interpreter.c pgm_io.c tensor_io.c
 OBJS = $(SRCS:.c=.o)
 
 # Target principale: produce l'eseguibile 'tensorforth'

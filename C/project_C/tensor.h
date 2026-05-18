@@ -28,6 +28,9 @@ typedef struct {
     int32_t ndim;             /* Quante dimensioni sono effettivamente usate (1 o 2). */
     size_t size;              /* Numero totale di elementi = prodotto delle dimensioni. */
     int    refcount;          /* Numero di riferimenti logici a questo tensore. */
+    /* Campi per gestire dati mappati con mmap. */
+    void  *mmap_base;   /* indirizzo base della mappatura, oppure NULL se non mappato */
+    size_t mmap_size;   /* dimensione della mappatura in bytes */
 } tensor;
 
 /* Crea un nuovo tensore con la shape indicata (shape[0..ndim-1]).
@@ -91,5 +94,25 @@ tensor *tensor_ravel(tensor *a);
  * Non cambia l'ordine dei dati in memoria.
  */
 tensor *tensor_reshape(tensor *a, const tensor *s);
+
+/* Riduzione: somma di tutti gli elementi di a in un tensore 1D di 1 elemento. */
+tensor *tensor_sum_all(const tensor *a);
+
+/* Genera un tensore di shape definita da s (1D di 1 o 2 elementi), 
+ * riempito con float random uniformi in [0,1]. */
+tensor *tensor_random_from_shape(const tensor *s);
+
+/* Fill: crea un tensore di shape s e lo riempie ripetendo i valori di v. */
+tensor *tensor_fill_from_shape(const tensor *s, const tensor *v);
+
+/* Prodotto di matrici 2D: se a è m×k e b è k×n, ritorna m×n. */
+tensor *tensor_matmul(const tensor *a, const tensor *b);
+
+/* Prodotto scalare tra due vettori 1D di stessa dimensione. */
+tensor *tensor_dot(const tensor *a, const tensor *b);
+
+/* Convoluzione 2D con stride 1 e padding di zeri: 
+ * a: input H×W, k: kernel Kh×Kw, output H×W. */
+tensor *tensor_conv2d(const tensor *a, const tensor *k);
 
 #endif /* TENSOR_H */
