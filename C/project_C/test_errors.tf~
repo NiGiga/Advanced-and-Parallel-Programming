@@ -1,0 +1,15 @@
+# 1) Programma corretto: somma di due vettori
+[1 2 3] [4 5 6] +
+p
+
+# 2) Errore di tipo: somma tra tensore e stringa
+[1 2 3] "ciao" +
+p
+
+# 3) Errore di stack: prova a fare + con un solo operando
+[1 2 3]
++
+
+# 4) Token non valido: dovrebbe dare errore di parsing
+[1 2 3] [4 5 6] ???
+p

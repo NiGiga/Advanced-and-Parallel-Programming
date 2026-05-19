@@ -238,6 +238,54 @@ tensor *tensor_relu(const tensor *a) {
     return res;
 }
 
+tensor *tensor_min(const tensor *a, const tensor *b) {
+    if (!a || !b) {
+        return NULL;
+    }
+
+    if (!tensor_same_shape(a, b)) {
+        return NULL;
+    }
+
+    tensor *res = tensor_create((int32_t *)a->shape, a->ndim);
+    if (!res) {
+        return NULL;
+    }
+
+    size_t n = a->size;
+    for (size_t i = 0; i < n; ++i) {
+        float av = a->data[i];
+        float bv = b->data[i];
+        res->data[i] = (av < bv) ? av : bv;
+    }
+
+    return res;
+}
+
+tensor *tensor_max(const tensor *a, const tensor *b) {
+    if (!a || !b) {
+        return NULL;
+    }
+
+    if (!tensor_same_shape(a, b)) {
+        return NULL;
+    }
+
+    tensor *res = tensor_create((int32_t *)a->shape, a->ndim);
+    if (!res) {
+        return NULL;
+    }
+
+    size_t n = a->size;
+    for (size_t i = 0; i < n; ++i) {
+        float av = a->data[i];
+        float bv = b->data[i];
+        res->data[i] = (av > bv) ? av : bv;
+    }
+
+    return res;
+}
+
 /* Funzione di supporto interna per i confronti elementwise.
  * Confronta due tensori a e b che devono avere la stessa shape.
  * Il parametro mode seleziona l'operazione:
@@ -306,6 +354,67 @@ tensor *tensor_eq(const tensor *a, const tensor *b) {
     return tensor_compare_template(a, b, 2);
 }
 
+/* Template per operatori logici binari elementwise (AND, OR). */
+static tensor *tensor_logical_binary_template(const tensor *a, const tensor *b, int mode) {
+    if (!a || !b) {
+        return NULL;
+    }
+
+    if (!tensor_same_shape(a, b)) {
+        return NULL;
+    }
+
+    tensor *res = tensor_create((int32_t *)a->shape, a->ndim);
+    if (!res) {
+        return NULL;
+    }
+
+    size_t n = a->size;
+    for (size_t i = 0; i < n; ++i) {
+        int av = (a->data[i] != 0.0f);
+        int bv = (b->data[i] != 0.0f);
+        int cond = 0;
+
+        if (mode == 0) {         /* AND */
+            cond = av && bv;
+        } else {                 /* OR */
+            cond = av || bv;
+        }
+
+        res->data[i] = cond ? 1.0f : 0.0f;
+    }
+
+    return res;
+}
+
+tensor *tensor_and(const tensor *a, const tensor *b) {
+    return tensor_logical_binary_template(a, b, 0);
+}
+
+tensor *tensor_or(const tensor *a, const tensor *b) {
+    return tensor_logical_binary_template(a, b, 1);
+}
+
+/* NOT elementwise (unario). */
+tensor *tensor_not(const tensor *a) {
+    if (!a) {
+        return NULL;
+    }
+
+    tensor *res = tensor_create((int32_t *)a->shape, a->ndim);
+    if (!res) {
+        return NULL;
+    }
+
+    size_t n = a->size;
+    for (size_t i = 0; i < n; ++i) {
+        int av = (a->data[i] != 0.0f);
+        res->data[i] = av ? 0.0f : 1.0f;
+    }
+
+    return res;
+}
+
 /* Crea un tensore 1D che contiene le dimensioni del tensore a.
  * Se a è 1D con shape [N], ritorna un tensore 1D di 1 elemento [N].
  * Se a è 2D con shape [H W], ritorna un tensore 1D di 2 elementi [H W]. */
@@ -366,15 +475,18 @@ tensor *tensor_ravel(tensor *a) {
 
 tensor *tensor_reshape(tensor *a, const tensor *s) {
         if (!a || !s) {
-        fprintf(stderr, "DEBUG tensor_reshape: a o s è NULL\n");
         return NULL;
     }
 
+    #ifdef DEBUG
     fprintf(stderr, "DEBUG tensor_reshape: s->ndim=%d, s->size=%zu\n",
             s->ndim, s->size);
+    #endif
 
     if (s->ndim != 1 || (s->size != 1 && s->size != 2)) {
+        #ifedf DEBUG
         fprintf(stderr, "DEBUG tensor_reshape: s non è 1D con 1 o 2 elementi\n");
+	#endif
         return NULL;
     }
 
@@ -383,9 +495,14 @@ tensor *tensor_reshape(tensor *a, const tensor *s) {
 
     for (int32_t i = 0; i < new_ndim; ++i) {
         int val = (int)s->data[i];
+
+	#ifdef DEBUG
         fprintf(stderr, "DEBUG tensor_reshape: s->data[%d]=%d\n", i, val);
+	#endif
         if (val <= 0) {
+	    #ifdef DEBUG
             fprintf(stderr, "DEBUG tensor_reshape: dimensione non positiva\n");
+	    #endif
             return NULL;
         }
         new_shape[i] = (int32_t)val;
@@ -393,11 +510,15 @@ tensor *tensor_reshape(tensor *a, const tensor *s) {
 
     /* verifico che non cambi*/
     size_t new_size = tensor_num_elements(new_shape, new_ndim);
+    #ifedf DEBUG
     fprintf(stderr, "DEBUG tensor_reshape: new_size=%zu, a->size=%zu\n",
             new_size, a->size);
+    #endif
 
     if (new_size != a->size) {
+        #ifdef DEBUG
         fprintf(stderr, "DEBUG tensor_reshape: new_size != a->size\n");
+	#endif
         return NULL;
     }
 

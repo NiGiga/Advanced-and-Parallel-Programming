@@ -101,7 +101,9 @@ static tensor *parse_tensor_1d(const char *tok) {
     shape[0] = count;
     tensor *t = tensor_create(shape, 1);
     if (!t) {
+        #ifdef DEBUG
         fprintf(stderr, "DEBUG parse_tensor_1d: tensor_create fallita (count=%d)\n", count);
+	#endif
         free(buffer);
         return NULL;
     }
@@ -288,8 +290,10 @@ interpreter_status execute_token(stack *st, const char *tok) {
 		return INTERPRETER_STACK_ERROR;
 	      }
 
+	      #ifdef DEBUG
 	      printf("DEBUG r: va.type=%d va.as.t=%p, vs.type=%d vs.as.t=%p\n",
-		     va.type, (void*)va.as.t, vs.type, (void*)vs.as.t);
+		 va.type, (void*)va.as.t, vs.type, (void*)vs.as.t);
+	      #endif
 
 	      /* Controllo SOLO i tipi. */
 	      if (va.type != VALUE_TENSOR || vs.type != VALUE_TENSOR) {
@@ -305,7 +309,9 @@ interpreter_status execute_token(stack *st, const char *tok) {
 	      tensor_dec_ref(vs.as.t);
 
 	      if (!res) {
+		#ifedf DEBUG
 		fprintf(stderr, "DEBUG r: tensor_reshape ha restituito NULL\n");
+		#endif
 		return INTERPRETER_TYPE_ERROR; /* si potrebbe implementare un  errore di shape. */
 	      }
 
@@ -689,7 +695,197 @@ interpreter_status execute_token(stack *st, const char *tok) {
         return INTERPRETER_OK;
     }
 
-    /* 5) Prodotto di matrici con '@' (b a -- a@b). */
+    /* 5)  Operatori di confronto elementwise: <, >, = (b a -- a op b). */
+    if ((tok[0] == '<' || tok[0] == '>' || tok[0] == '=') && tok[1] == '\0') {
+        char op = tok[0];
+        value va, vb;
+
+        /* Pop a (cima) e poi b (secondo). */
+        if (!stack_pop(st, &va) || !stack_pop(st, &vb)) {
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+            return INTERPRETER_STACK_ERROR;
+        }
+
+        /* Mi aspetto due tensori. */
+        if (va.type != VALUE_TENSOR || !va.as.t ||
+            vb.type != VALUE_TENSOR || !vb.as.t) {
+
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        tensor *res = NULL;
+        if (op == '<') {
+            res = tensor_lt(vb.as.t, va.as.t);
+        } else if (op == '>') {
+            res = tensor_gt(vb.as.t, va.as.t);
+        } else if (op == '=') {
+            res = tensor_eq(vb.as.t, va.as.t);
+        }
+
+        tensor_dec_ref(va.as.t);
+        tensor_dec_ref(vb.as.t);
+
+        if (!res) {
+            /* shape incompatibile o memoria esaurita. */
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        value vres;
+        vres.type = VALUE_TENSOR;
+        vres.as.t = res;
+
+        if (!stack_push(st, vres)) {
+            tensor_dec_ref(res);
+            return INTERPRETER_MEMORY_ERROR;
+        }
+
+        return INTERPRETER_OK;
+    }
+
+    /* 6) Operatori logici binari elementwise: & e | (b a -- a op b). */
+    if ((tok[0] == '&' || tok[0] == '|') && tok[1] == '\0') {
+        char op = tok[0];
+        value va, vb;
+
+        if (!stack_pop(st, &va) || !stack_pop(st, &vb)) {
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+            return INTERPRETER_STACK_ERROR;
+        }
+
+        if (va.type != VALUE_TENSOR || !va.as.t ||
+            vb.type != VALUE_TENSOR || !vb.as.t) {
+
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        tensor *res = NULL;
+        if (op == '&') {
+            res = tensor_and(vb.as.t, va.as.t);
+        } else { /* '|' */
+            res = tensor_or(vb.as.t, va.as.t);
+        }
+
+        tensor_dec_ref(va.as.t);
+        tensor_dec_ref(vb.as.t);
+
+        if (!res) {
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        value vres;
+        vres.type = VALUE_TENSOR;
+        vres.as.t = res;
+
+        if (!stack_push(st, vres)) {
+            tensor_dec_ref(res);
+            return INTERPRETER_MEMORY_ERROR;
+        }
+
+        return INTERPRETER_OK;
+    }
+
+    /* 7) Operatore logico unario NOT: ! (a -- !a). */
+    if (tok[0] == '!' && tok[1] == '\0') {
+        value va;
+        if (!stack_pop(st, &va)) {
+            return INTERPRETER_STACK_ERROR;
+        }
+
+        if (va.type != VALUE_TENSOR || !va.as.t) {
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        tensor *res = tensor_not(va.as.t);
+        tensor_dec_ref(va.as.t);
+
+        if (!res) {
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        value vres;
+        vres.type = VALUE_TENSOR;
+        vres.as.t = res;
+
+        if (!stack_push(st, vres)) {
+            tensor_dec_ref(res);
+            return INTERPRETER_MEMORY_ERROR;
+        }
+
+        return INTERPRETER_OK;
+    }
+
+    /* 8) Operazioni min/max elementwise: m, M (b a -- min/max(a,b)). */
+    if ((tok[0] == 'm' || tok[0] == 'M') && tok[1] == '\0') {
+        char op = tok[0];
+        value va, vb;
+
+        /* Pop a (cima) e poi b (secondo). */
+        if (!stack_pop(st, &va) || !stack_pop(st, &vb)) {
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+            return INTERPRETER_STACK_ERROR;
+        }
+
+        /* Mi aspetto due tensori. */
+        if (va.type != VALUE_TENSOR || !va.as.t ||
+            vb.type != VALUE_TENSOR || !vb.as.t) {
+
+            if (va.type == VALUE_TENSOR && va.as.t) tensor_dec_ref(va.as.t);
+            if (va.type == VALUE_STRING && va.as.s) free(va.as.s);
+            if (vb.type == VALUE_TENSOR && vb.as.t) tensor_dec_ref(vb.as.t);
+            if (vb.type == VALUE_STRING && vb.as.s) free(vb.as.s);
+
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        tensor *res = NULL;
+        if (op == 'm') {
+            res = tensor_min(vb.as.t, va.as.t);
+        } else { /* 'M' */
+            res = tensor_max(vb.as.t, va.as.t);
+        }
+
+        tensor_dec_ref(va.as.t);
+        tensor_dec_ref(vb.as.t);
+
+        if (!res) {
+            /* shape incompatibile o memoria esaurita. */
+            return INTERPRETER_TYPE_ERROR;
+        }
+
+        value vres;
+        vres.type = VALUE_TENSOR;
+        vres.as.t = res;
+
+        if (!stack_push(st, vres)) {
+            tensor_dec_ref(res);
+            return INTERPRETER_MEMORY_ERROR;
+        }
+
+        return INTERPRETER_OK;
+    }
+
+    /* 9) Prodotto di matrici con '@' (b a -- a@b). */
     if (tok[0] == '@' && tok[1] == '\0') {
         value va, vb;
         if (!stack_pop(st, &va) || !stack_pop(st, &vb)) {
@@ -729,7 +925,7 @@ interpreter_status execute_token(stack *st, const char *tok) {
         return INTERPRETER_OK;
     }
 
-    /* 6) Prodotto scalare '.' (b a -- a.b). */
+    /* 10) Prodotto scalare '.' (b a -- a.b). */
     if (tok[0] == '.' && tok[1] == '\0') {
         value va, vb;
         if (!stack_pop(st, &va) || !stack_pop(st, &vb)) {
@@ -771,7 +967,7 @@ interpreter_status execute_token(stack *st, const char *tok) {
         return INTERPRETER_OK;
     }
 
-    /* 7) Convoluzione 2D 'c' (a k -- conv(a,k)). */
+    /* 11) Convoluzione 2D 'c' (a k -- conv(a,k)). */
     if (tok[0] == 'c' && tok[1] == '\0') {
         value vk, va;
         if (!stack_pop(st, &vk) || !stack_pop(st, &va)) {

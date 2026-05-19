@@ -75,6 +75,12 @@ tensor *tensor_mul(const tensor *a, const tensor *b);
 /* ReLU elementwise: res[i] = max(0, a[i]). */
 tensor *tensor_relu(const tensor *a);
 
+/* MIN: m (b a -- min(a,b)): per ogni elemento prende il minimo tra a[i] e b[i]. */
+tensor *tensor_min(const tensor *a, const tensor *b);
+
+/* MAX: M (b a -- max(a,b)): per ogni elemento prende il massimo. */
+tensor *tensor_max(const tensor *a, const tensor *b);
+
 /* Confronto elementwise: res = (a < b) ? 1.0 : 0.0 (stessa shape). */
 tensor *tensor_lt(const tensor *a, const tensor *b);
 
@@ -83,6 +89,15 @@ tensor *tensor_gt(const tensor *a, const tensor *b);
 
 /* Uguaglianza elementwise: res = (a == b) ? 1.0 : 0.0. */
 tensor *tensor_eq(const tensor *a, const tensor *b);
+
+/* AND */
+tensor *tensor_and(const tensor *a, const tensor *b);
+
+/* OR */
+tensor *tensor_or(const tensor *a, const tensor *b);
+
+/* NOT */
+tensor *tensor_not(const tensor *a);
 
 /* Restituisce la shape del tensore come tensore 1D di 1 o 2 elementi. */
 tensor *tensor_shape_tensor(const tensor *a);
