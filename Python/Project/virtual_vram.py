@@ -68,8 +68,9 @@ class VirtualVRAM:
         col = tile_id % tiles_per_row
 
         # passo da coordinate griglia (row, col) -> indice in array (posizione pixel)
-        y0 = row * tile_size
-        x0 = col * tile_size
+        # int per evitare overflow
+        y0 = int(row * tile_size)
+        x0 = int(col * tile_size)
 
         # ritaglio blocco 32x32
         return self._tiles[y0:y0+tile_size, x0:x0+tile_size]
@@ -92,8 +93,9 @@ class VirtualVRAM:
         col = sprite_id % sprite_per_row
 
         # passo da coordinate griglia (row, col) -> indice in array (posizione pixel)
-        y0 = row * sprite_size
-        x0 = col * sprite_size
+        # int per evitare overflow
+        y0 = int(row * sprite_size)
+        x0 = int(col * sprite_size)
 
         # ritaglio blocco 64x64
-        return self._tiles[y0:y0+sprite_size, x0:x0+sprite_size]
+        return self._sprites[y0:y0+sprite_size, x0:x0+sprite_size]
